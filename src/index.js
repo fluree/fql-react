@@ -20,7 +20,7 @@ var componentIdx = {};
 // for async calls to the worker, maintains the callback to execute with the result, when applicable
 var callbackRegistry = {};
 
-var fqlWorker = new Worker("fqlClient.js");
+var fqlWorker = new Worker("/fqlClient.js");
 
 fqlWorker.onmessage = function(e) {
     const msg = e.data;

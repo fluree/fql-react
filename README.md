@@ -31,8 +31,8 @@ const UserComponent = ({username, data}) => (
         <p>Error: {JSON.stringify(data.error)}</p>
         <p>Warnings: {JSON.stringify(data.warning)}</p>
         <p>username Provided: {username}</p>
-        <p>username from result: {data.result && data.result.username}</p>
-        <p>Given name: {data.result.person && data.result.person.nameGiven}</p>
+        <p>username from result: {data.result.user && data.result.user.username}</p>
+        <p>Given name: {data.result.user && data.result.user.person && data.result.user.person.nameGiven}</p>
     </div>
 );
 
@@ -82,8 +82,8 @@ const UserComponent = ({username, data}) => (
         <p>Error: {JSON.stringify(data.error)}</p>
         <p>Warnings: {JSON.stringify(data.warning)}</p>
         <p>username Provided: {username}</p>
-        <p>username from result: {data.result && data.result.username}</p>
-        <p>Given name: {data.result.person && data.result.person.nameGiven}</p>
+        <p>username from result: {data.result.user && data.result.user.username}</p>
+        <p>Given name: {data.result.user && data.result.user.person && data.result.user.person.nameGiven}</p>
     </div>
 );
 
