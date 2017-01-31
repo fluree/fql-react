@@ -46,6 +46,11 @@ fqlWorker.onmessage = function(e) {
                 cb(msg.data);
             }
             return;
+        case "login":
+            // for now we don't do anything with a login event
+            const connId = msg.conn;
+            const loginResponse = msg.data;
+            return;
         default:
             console.warn("Unreconized event from worker: " + msg.event + ". Full message: " + JSON.stringify(msg));
     }
@@ -118,6 +123,11 @@ export function ReactConnect(settings) {
     const conn = {
         id: connId,
         isReady: () => isReady(connId),
+        login: (username, password) => workerInvoke({
+                        conn: connId, 
+                        action: "login", 
+                        params: [username, password]
+                    }),
         invoke: function(action, params, cb) { 
                     const invokeStatment = [action, params];
                     return workerInvoke({
@@ -134,7 +144,7 @@ export function ReactConnect(settings) {
         conn: 0, // conn 0 means not connection specific
         action: "connect",
         params: [s]
-    })
+    });
 
     // return connection object
     return conn;
