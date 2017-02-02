@@ -90,7 +90,7 @@ export function registerQuery(conn, compId, query, opts) {
         conn: conn.id,
         action: "registerQuery",
         ref: compId,
-        params: [compId, query, null]
+        params: [compId, query, opts]
         };
     return workerInvoke(invokeObj);
 }
