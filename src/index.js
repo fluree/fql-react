@@ -24,6 +24,7 @@ var fqlWorker = new Worker("/fqlClient.js");
 
 fqlWorker.onmessage = function(e) {
     const msg = e.data;
+    var cb;
     console.log("Worker received message: " + JSON.stringify(msg));
 
     switch (msg.event) {
@@ -40,7 +41,7 @@ fqlWorker.onmessage = function(e) {
             return;
         case "remoteInvoke":
             // check for a callback 
-            const cb = callbackRegistry[msg.ref];
+            cb = callbackRegistry[msg.ref];
             if (cb) {
                 delete callbackRegistry[msg.ref];
                 cb(msg.data);
@@ -48,8 +49,11 @@ fqlWorker.onmessage = function(e) {
             return;
         case "login":
             // for now we don't do anything with a login event
-            const connId = msg.conn;
-            const loginResponse = msg.data;
+            cb = callbackRegistry[msg.ref];
+            if (cb) {
+                delete callbackRegistry[msg.ref];
+                cb(msg.data);
+            }
             return;
         default:
             console.warn("Unreconized event from worker: " + msg.event + ". Full message: " + JSON.stringify(msg));
@@ -123,10 +127,11 @@ export function ReactConnect(settings) {
     const conn = {
         id: connId,
         isReady: () => isReady(connId),
-        login: (username, password) => workerInvoke({
+        login: (username, password, cb) => workerInvoke({
                         conn: connId, 
                         action: "login", 
-                        params: [username, password]
+                        params: [username, password],
+                        cb: cb
                     }),
         invoke: function(action, params, cb) { 
                     const invokeStatment = [action, params];
