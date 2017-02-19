@@ -204,15 +204,39 @@ function getMissingVars(flurQL, opts) {
 
     const vars = flurQL.vars;
 
-    if (Array.isArray(vars)) {
-        if (opts && opts.vars) {
-            return vars.filter( (v) => { return !opts.vars[v]})
-        } else {
-            return vars;
-        }
-    } else {
+    if (!vars || !Array.isArray(vars)) {
         return [];
     }
+
+    if (opts && opts.vars) {
+        return vars.filter( (v) => { return !opts.vars[v]})
+    } else {
+        return vars;
+    }
+}
+
+// Create an empty map of the top level query nodes so less
+// boilerplate is required to test if a property exists in the
+// wrapped component
+function fillDefaultResult(query) {
+
+    const graph = query.graph || query;
+
+    if (!Array.isArray(graph)) { // invalid graph
+        return;
+    }
+
+    var defaultResult = {};
+
+    graph.map(([stream, opts]) => {
+        if (opts.as) {
+            defaultResult[opts.as] = null;
+        } else {
+            defaultResult[stream] = null;
+        }
+    });
+
+    return defaultResult;
 }
 
 
@@ -234,7 +258,7 @@ function wrapComponent(WrappedComponent, query, opts) {
             this.id = nextId();
             this.missingVars = getMissingVars(query, this.opts); // list of vars we need to check props for
             this.state = {
-                result: null,
+                result: fillDefaultResult(query),
                 error: null,
                 warning: null,
                 status: null,
