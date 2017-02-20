@@ -13,23 +13,31 @@ function nextId() {
 
 // a stateful connection id, incremented for each connection.
 var connIdCounter = 0;
-// map of each connection and if ready true/false
+
+// map of each connection to an object containing keys:
+// - ready (boolean)
+// - user (user ident - two-tuple) 
+// - anonymous (boolean)
 var connStatus = {};
+
 // a map of each component ID to it's object
 var componentIdx = {};
+
 // for async calls to the worker, maintains the callback to execute with the result, when applicable
 var callbackRegistry = {};
 
-var fqlWorker = new Worker("/fqlClient.js");
+// holds worker reference globally. Don't initiate until first request for connection
+var fqlWorker;
 
-fqlWorker.onmessage = function(e) {
+// worker.onmessage handler
+function workerMessageHandler(e) {
     const msg = e.data;
     var cb;
     console.log("Worker received message: " + JSON.stringify(msg));
 
     switch (msg.event) {
         case "connReady":
-            connStatus[msg.conn] = true;
+            connStatus[msg.conn].ready = true;
             return;
         case "setState":
             const comp = componentIdx[msg.ref];
@@ -48,7 +56,12 @@ fqlWorker.onmessage = function(e) {
             }
             return;
         case "login":
-            // for now we don't do anything with a login event
+            // if login successful,  update conn's connStatus
+            if (msg.data.status === 200) {
+                connStatus[msg.conn].user = msg.data.body.user;
+                connStatus[msg.conn].anonymous = msg.data.body.anonymous;
+            }
+            // if there was a callback passed to login(), execute
             cb = callbackRegistry[msg.ref];
             if (cb) {
                 delete callbackRegistry[msg.ref];
@@ -74,7 +87,7 @@ function setStateCb(conn, id, stateUpdate) {
 
 // we use a global to track connection state, get method for it
 function isReady(connId) {
-    return connStatus[connId];
+    return connStatus[connId].ready;
 }
 
 
@@ -106,23 +119,29 @@ export function unregisterQuery(conn, compId) {
         ref:    compId,
         action: "unregisterQuery",
         params: [compId]
-        })
+        });
 }
 
 // Create a new connection with settings object.
 // need to provide url, instance and token keys at minumumb.
-export function ReactConnect(settings) {
+export function ReactConnect(connSettings) {
+
+    // initialize worker if not already done
+    if (!fqlWorker) {
+        fqlWorker = new Worker(connSettings.workerUrl || "/fqlClient.js");
+        fqlWorker.onmessage = workerMessageHandler;
+    }
 
     connIdCounter++;
 
     const connId = connIdCounter;
 
-    const baseSetting = {
+    const baseSetting =  {
         id: connId,
         removeNamespace: true // by default remove namespace from results
-        };
+    };
 
-    const s = Object.assign(baseSetting, settings);
+    const settings = Object.assign(baseSetting, connSettings);
 
     const conn = {
         id: connId,
@@ -141,19 +160,31 @@ export function ReactConnect(settings) {
                         params: [invokeStatment],
                         cb: cb
                     }); 
-                }
-    }
+                },
+        getUser: function() {
+            return connStatus[connId].user;
+        },
+        isAuthenticated: function() {
+            if (connStatus[connId].anonymous === false) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    };
+
+    // initialize connection status, set ready to false
+    connStatus[connId] = {ready: false};
 
     // initiate our connection in the web worker
     workerInvoke({
         conn: 0, // conn 0 means not connection specific
         action: "connect",
-        params: [s]
+        params: [settings]
     });
 
     // return connection object
     return conn;
-
 }
 
 
@@ -209,7 +240,7 @@ function getMissingVars(flurQL, opts) {
     }
 
     if (opts && opts.vars) {
-        return vars.filter( (v) => { return !opts.vars[v]})
+        return vars.filter((v) => { return !opts.vars[v]; });
     } else {
         return vars;
     }
