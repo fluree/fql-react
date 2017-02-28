@@ -364,7 +364,7 @@ function fillDefaultResult(query) {
               error: null,
               warning: null,
               status: null,
-              loading: null
+              loading: true
             };
 
             if (!this.conn) {
