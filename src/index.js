@@ -194,6 +194,9 @@ export function ReactConnect(connSettings) {
         getUser: function() {
           return connStatus[connId].user;
         },
+        getInstance: function() {
+          return connSettings.instance;
+        },
         isAuthenticated: function() {
           if (connStatus[connId].anonymous === false) {
             return true;
