@@ -145,7 +145,7 @@ export function registerQuery(conn, compId, query, opts) {
 export function unregisterQuery(conn, compId) {
   workerInvoke({
     conn: conn.id,
-    ref:    compId,
+    ref: compId,
     action: "unregisterQuery",
     params: [compId]
   });
@@ -155,116 +155,116 @@ export function unregisterQuery(conn, compId) {
 // need to provide url, instance and token keys at minumumb.
 export function ReactConnect(connSettings) {
 
-    // initialize worker if not already done
-    if (!fqlWorker) {
-      fqlWorker = new Worker(connSettings.workerUrl || "/fqlClient.js");
-      fqlWorker.onmessage = workerMessageHandler;
-    }
+  // initialize worker if not already done
+  if (!fqlWorker) {
+    fqlWorker = new Worker(connSettings.workerUrl || "/fqlClient.js");
+    fqlWorker.onmessage = workerMessageHandler;
+  }
 
-    connIdCounter++;
+  connIdCounter++;
 
-    const connId = connIdCounter;
+  const connId = connIdCounter;
 
-    const baseSetting =  {
-      id: connId,
-        removeNamespace: true // by default remove namespace from results
-      };
+  const baseSetting = {
+    id: connId,
+    removeNamespace: true // by default remove namespace from results
+  };
 
-      const settings = Object.assign(baseSetting, connSettings);
+  const settings = Object.assign(baseSetting, connSettings);
 
-      const conn = {
-        id: connId,
-        isReady: () => isReady(connId),
-        isClosed: () => isClosed(connId),
-        login: (username, password, cb) => workerInvoke({
-          conn: connId, 
-          action: "login", 
-          params: [username, password],
-          cb: cb
-        }),
-        invoke: function(action, params, cb) { 
-          const invokeStatment = [action, params];
-          return workerInvoke({
-            conn: connId, 
-            action: "remoteInvoke", 
-            params: [invokeStatment],
-            cb: cb
-          }); 
-        },
-        getUser: function() {
-          return connStatus[connId].user;
-        },
-        getInstance: function() {
-          return connSettings.instance;
-        },
-        isAuthenticated: function() {
-          if (connStatus[connId].anonymous === false) {
-            return true;
-          } else {
-            return false;
-          }
-        },
-        reset: function(cb) {
-          connStatus[connId] = {
-            ready: false,
-            user: null,
-            anonymous: true
-          };
-          return workerInvoke({
-            conn: connId, 
-            action: "reset", 
-            params: [],
-            cb: cb
-          }); 
-        },
-        logout: function(cb) {
-          connStatus[connId] = {
-            ready: false,
-            user: null,
-            anonymous: true
-          };
-          return workerInvoke({
-            conn: connId, 
-            action: "logout", 
-            params: [],
-            cb: cb
-          }); 
-        },
-        close: function(cb) {
-          // clear out connection state held locally
-          connStatus[connId] = {};
-          return workerInvoke({
-            conn: connId, 
-            action: "close", 
-            params: [],
-            cb: cb
-          }); 
-        }
-      };
-
-    // initialize connection status, set ready to false
-    connStatus[connId] = {
-      ready: false,
-        // if we already passed in a token, can also pass in the user/anonymous flags for storing
-        user: connSettings.user,
-        anonymous: connSettings.anonymous
-      };
-
-    // initiate our connection in the web worker
-    workerInvoke({
-        conn: 0, // conn 0 means not connection specific
-        action: "connect",
-        params: [settings]
+  const conn = {
+    id: connId,
+    isReady: () => isReady(connId),
+    isClosed: () => isClosed(connId),
+    login: (username, password, cb) => workerInvoke({
+      conn: connId,
+      action: "login",
+      params: [username, password],
+      cb: cb
+    }),
+    invoke: function (action, params, cb) {
+      const invokeStatment = [action, params];
+      return workerInvoke({
+        conn: connId,
+        action: "remoteInvoke",
+        params: [invokeStatment],
+        cb: cb
       });
+    },
+    getUser: function () {
+      return connStatus[connId].user;
+    },
+    getInstance: function () {
+      return connSettings.instance;
+    },
+    isAuthenticated: function () {
+      if (connStatus[connId].anonymous === false) {
+        return true;
+      } else {
+        return false;
+      }
+    },
+    reset: function (cb) {
+      connStatus[connId] = {
+        ready: false,
+        user: null,
+        anonymous: true
+      };
+      return workerInvoke({
+        conn: connId,
+        action: "reset",
+        params: [],
+        cb: cb
+      });
+    },
+    logout: function (cb) {
+      connStatus[connId] = {
+        ready: false,
+        user: null,
+        anonymous: true
+      };
+      return workerInvoke({
+        conn: connId,
+        action: "logout",
+        params: [],
+        cb: cb
+      });
+    },
+    close: function (cb) {
+      // clear out connection state held locally
+      connStatus[connId] = {};
+      return workerInvoke({
+        conn: connId,
+        action: "close",
+        params: [],
+        cb: cb
+      });
+    }
+  };
 
-    // return connection object
-    return conn;
-  }
+  // initialize connection status, set ready to false
+  connStatus[connId] = {
+    ready: false,
+    // if we already passed in a token, can also pass in the user/anonymous flags for storing
+    user: connSettings.user,
+    anonymous: connSettings.anonymous
+  };
+
+  // initiate our connection in the web worker
+  workerInvoke({
+    conn: 0, // conn 0 means not connection specific
+    action: "connect",
+    params: [settings]
+  });
+
+  // return connection object
+  return conn;
+}
 
 
-  function getDisplayName(component) {
-    return component.displayName || component.name || "Component";
-  }
+function getDisplayName(component) {
+  return component.displayName || component.name || "Component";
+}
 
 
 // wraps react components that need a particular connection, making the 
@@ -327,118 +327,130 @@ function fillDefaultResult(query) {
 
   const graph = query.graph || query;
 
-    if (!Array.isArray(graph)) { // invalid graph
-      return;
-    }
-
-    var defaultResult = {};
-
-    graph.map(([stream, opts]) => {
-      if (opts.as) {
-        defaultResult[opts.as] = null;
-      } else {
-        defaultResult[stream] = null;
-      }
-    });
-
-    return defaultResult;
+  if (!Array.isArray(graph)) { // invalid graph
+    return;
   }
 
+  var defaultResult = {};
 
-  function wrapComponent(WrappedComponent, query, opts) {
+  graph.map(([stream, opts]) => {
+    if (opts.as) {
+      defaultResult[opts.as] = null;
+    } else {
+      defaultResult[stream] = null;
+    }
+  });
 
-    const flurQLDisplayName = `Fluree(${getDisplayName(WrappedComponent)})`;
+  return defaultResult;
+}
 
-    class FlurQL extends Component {
-      static displayName = getDisplayName;
-      static WrappedComponent = WrappedComponent;
-      static contextTypes = {
-        conn: PropTypes.object.isRequired
+
+function wrapComponent(WrappedComponent, query, opts) {
+
+  const flurQLDisplayName = `Fluree(${getDisplayName(WrappedComponent)})`;
+
+  class FlurQL extends Component {
+    static displayName = getDisplayName;
+    static WrappedComponent = WrappedComponent;
+    static contextTypes = {
+      conn: PropTypes.object.isRequired
+    };
+
+    constructor(props, context) {
+      super(props, context);
+      this.conn = context.conn;
+      this.opts = Object.assign({ vars: {} }, opts);
+      this.id = nextId();
+      this.missingVars = getMissingVars(query, this.opts); // list of vars we need to check props for
+      this.state = {
+        result: fillDefaultResult(query),
+        error: null,
+        warning: null,
+        status: null,
+        loading: true
       };
 
-      constructor(props, context) {
-        super(props, context);
-        this.conn = context.conn;
-        this.opts = Object.assign({vars: {}}, opts);
-        this.id = nextId();
-            this.missingVars = getMissingVars(query, this.opts); // list of vars we need to check props for
-            this.state = {
-              result: fillDefaultResult(query),
-              error: null,
-              warning: null,
-              status: null,
-              loading: true
-            };
+      if (!this.conn) {
+        throw "Could not find a Fluree connection (conn) in the context of " + flurQLDisplayName + ".";
+      }
+    }
 
-            if (!this.conn) {
-              throw "Could not find a Fluree connection (conn) in the context of " + flurQLDisplayName + ".";
-            }
-          }
-
-          componentWillMount() {
-            // get any missing vars from props and update this.opts with them
-            if (this.missingVars.length !== 0) {
-              this.missingVars.map( (v) => { this.opts.vars[v] = this.props[v] });
-            }
-
-            // register this component for later re-render calling, etc.
-            componentIdx[this.id] = this;
-
-            registerQuery(this.conn, this.id, query, this.opts);
-
-          }
-
-          componentWillUnmount() {
-
-            unregisterQuery(this.conn, this.id);
-            delete componentIdx[this.id];
-
-          }
-
-          componentWillReceiveProps(nextProps) {
-            // check if any of the missing vars changed with the new props
-            let didMissingVarsChange = false;
-
-            for (let i = 0; i < this.missingVars.length; i++) {
-              const varName = this.missingVars[i];
-              if (this.props[varName] !== nextProps[varName]) {
-                didMissingVarsChange = true;
-              }
-            }
-
-            if (didMissingVarsChange === true) {
-              this.missingVars.map( (v) => { 
-                this.opts.vars[v] = nextProps[v];
-                return;
-              });
-              registerQuery(this.conn, this.id, query, this.opts);
-            }
-          }
-
-          render() {
-            const isLoading = this.state.status && this.state.status !== "loaded";
-            const data = {
-              id: this.id,
-              result: this.state.result,
-              error: this.state.error,
-              warning: this.state.warning,
-              status: this.state.status,
-              loading: isLoading
-            };
-
-            const childProps = Object.assign( {}, this.props, {data: data, invoke: this.conn.invoke});
-
-            return createElement(WrappedComponent, childProps);
-          }
-        }
-
-        return hoistNonReactStatics(FlurQL, WrappedComponent, {});
+    componentWillMount() {
+      // get any missing vars from props and update this.opts with them
+      if (this.missingVars.length !== 0) {
+        this.missingVars.map((v) => { this.opts.vars[v] = this.props[v] });
       }
 
+      // register this component for later re-render calling, etc.
+      componentIdx[this.id] = this;
 
-      export function flureeQL(query, opts) {
-        return function(WrappedComponent) {
-          return wrapComponent(WrappedComponent, query, opts);
+      registerQuery(this.conn, this.id, query, this.opts);
+
+    }
+
+    componentWillUnmount() {
+
+      unregisterQuery(this.conn, this.id);
+      delete componentIdx[this.id];
+
+    }
+
+    componentWillReceiveProps(nextProps) {
+      // check if any of the missing vars changed with the new props
+      let didMissingVarsChange = false;
+
+      for (let i = 0; i < this.missingVars.length; i++) {
+        const varName = this.missingVars[i];
+        if (this.props[varName] !== nextProps[varName]) {
+          didMissingVarsChange = true;
         }
       }
+
+      if (didMissingVarsChange === true) {
+        this.missingVars.map((v) => {
+          this.opts.vars[v] = nextProps[v];
+          return;
+        });
+        registerQuery(this.conn, this.id, query, this.opts);
+      }
+    }
+
+    render() {
+      const result = this.state.result;
+      const data = {
+        id: this.id,
+        result: result,
+        error: this.state.error,
+        warning: this.state.warning,
+        status: this.state.status,
+        loading: this.state.status !== "loaded",
+        get: function (keySeq, defaultVal) {
+          keySeq = Array.isArray(keySeq) ? keySeq : [keySeq];
+          let obj = result;
+          let idx = 0;
+          const length = keySeq.length;
+
+          while (obj != null && idx < length) {
+            obj = obj[keySeq[idx++]];
+          }
+
+          return (idx == length && obj !== undefined) ? obj : defaultVal;
+        }
+      };
+
+      const childProps = Object.assign({}, this.props, { data: data, invoke: this.conn.invoke });
+
+      return createElement(WrappedComponent, childProps);
+    }
+  }
+
+  return hoistNonReactStatics(FlurQL, WrappedComponent, {});
+}
+
+
+export function flureeQL(query, opts) {
+  return function (WrappedComponent) {
+    return wrapComponent(WrappedComponent, query, opts);
+  }
+}
 
