@@ -325,6 +325,8 @@ function getMissingVars(flurQL, opts) {
 // wrapped component
 function fillDefaultResult(query) {
 
+  if (!query) return {};
+
   const graph = query.graph || query;
 
   if (!Array.isArray(graph)) { // invalid graph
@@ -361,9 +363,11 @@ function wrapComponent(WrappedComponent, query, opts) {
       this.conn = context.conn;
       this.opts = Object.assign({ vars: {} }, opts);
       this.id = nextId();
-      this.missingVars = getMissingVars(query, this.opts); // list of vars we need to check props for
+      this.queryIsFunction = (typeof query === "function")
+      this.query = this.queryIsFunction ? query(props, this.context) : query;
+      this.missingVars = this.query ? getMissingVars(this.query, this.opts) : []; // list of vars we need to check props for
       this.state = {
-        result: fillDefaultResult(query),
+        result: fillDefaultResult(this.query),
         error: null,
         warning: null,
         status: null,
@@ -384,7 +388,7 @@ function wrapComponent(WrappedComponent, query, opts) {
       // register this component for later re-render calling, etc.
       componentIdx[this.id] = this;
 
-      registerQuery(this.conn, this.id, query, this.opts);
+      registerQuery(this.conn, this.id, this.query, this.opts);
 
     }
 
@@ -396,22 +400,28 @@ function wrapComponent(WrappedComponent, query, opts) {
     }
 
     componentWillReceiveProps(nextProps) {
-      // check if any of the missing vars changed with the new props
-      let didMissingVarsChange = false;
+      if (this.queryIsFunction) {
+        const newQuery = query(nextProps, this.context);
+        this.query = newQuery;
+        registerQuery(this.conn, this.id, this.query, this.opts);
+      } else {
+        // check if any of the missing vars changed with the new props
+        let didMissingVarsChange = false;
 
-      for (let i = 0; i < this.missingVars.length; i++) {
-        const varName = this.missingVars[i];
-        if (this.props[varName] !== nextProps[varName]) {
-          didMissingVarsChange = true;
+        for (let i = 0; i < this.missingVars.length; i++) {
+          const varName = this.missingVars[i];
+          if (this.props[varName] !== nextProps[varName]) {
+            didMissingVarsChange = true;
+          }
         }
-      }
 
-      if (didMissingVarsChange === true) {
-        this.missingVars.map((v) => {
-          this.opts.vars[v] = nextProps[v];
-          return;
-        });
-        registerQuery(this.conn, this.id, query, this.opts);
+        if (didMissingVarsChange === true) {
+          this.missingVars.map((v) => {
+            this.opts.vars[v] = nextProps[v];
+            return;
+          });
+          registerQuery(this.conn, this.id, this.query, this.opts);
+        }
       }
     }
 
