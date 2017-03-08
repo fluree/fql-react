@@ -347,6 +347,19 @@ function fillDefaultResult(query) {
 }
 
 
+function queryIsValid(query) {
+  if (query !== null && (Array.isArray(query) || typeof query === "object")) {
+    const graph = Array.isArray(query) ? query : query.graph;
+    if (Array.isArray(graph) && graph.length > 0) {
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    return false;
+  }
+}
+
 function wrapComponent(WrappedComponent, query, opts) {
 
   const flurQLDisplayName = `Fluree(${getDisplayName(WrappedComponent)})`;
@@ -365,12 +378,13 @@ function wrapComponent(WrappedComponent, query, opts) {
       this.id = nextId();
       this.queryIsFunction = (typeof query === "function")
       this.query = this.queryIsFunction ? query(props, this.context) : query;
-      this.missingVars = this.query ? getMissingVars(this.query, this.opts) : []; // list of vars we need to check props for
+      this.isValidQuery = this.query && queryIsValid(this.query);
+      this.missingVars = this.isValidQuery ? getMissingVars(this.query, this.opts) : []; // list of vars we need to check props for
       this.state = {
-        result: fillDefaultResult(this.query),
-        error: null,
-        warning: null,
-        status: null,
+        result: this.isValidQuery ? fillDefaultResult(this.query) : {},
+        error: this.query && !this.isValidQuery ? { status: 400, message: "Query is not valid: " + JSON.stringify(this.query) } : null,
+        warning: this.query ? null : "No query yet, waiting...",
+        status: "pending",
         loading: true
       };
 
@@ -388,8 +402,9 @@ function wrapComponent(WrappedComponent, query, opts) {
       // register this component for later re-render calling, etc.
       componentIdx[this.id] = this;
 
-      registerQuery(this.conn, this.id, this.query, this.opts);
-
+      if (this.query && this.isValidQuery) {
+        registerQuery(this.conn, this.id, this.query, this.opts);
+      }
     }
 
     componentWillUnmount() {
@@ -403,7 +418,10 @@ function wrapComponent(WrappedComponent, query, opts) {
       if (this.queryIsFunction) {
         const newQuery = query(nextProps, this.context);
         this.query = newQuery;
-        registerQuery(this.conn, this.id, this.query, this.opts);
+        this.isValidQuery = queryIsValid(this.query);
+        if (this.query && this.isValidQuery) {
+          registerQuery(this.conn, this.id, this.query, this.opts);
+        }
       } else {
         // check if any of the missing vars changed with the new props
         let didMissingVarsChange = false;
