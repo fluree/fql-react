@@ -16,7 +16,7 @@ var connIdCounter = 0;
 
 // map of each connection to an object containing keys:
 // - ready (boolean)
-// - user (user ident - two-tuple) 
+// - user (user ident - two-tuple)
 // - anonymous (boolean)
 var connStatus = {};
 
@@ -69,7 +69,7 @@ function workerMessageHandler(e) {
       return;
 
     case "remoteInvoke":
-      // check for a callback 
+      // check for a callback
       cb = callbackRegistry[msg.ref];
       if (cb) {
         delete callbackRegistry[msg.ref];
@@ -267,7 +267,7 @@ function getDisplayName(component) {
 }
 
 
-// wraps react components that need a particular connection, making the 
+// wraps react components that need a particular connection, making the
 // connection available via the context to children
 export class FlureeProvider extends Component {
 
@@ -302,8 +302,8 @@ export class FlureeProvider extends Component {
 }
 
 
-// given a query and options, returns a vector of variables that 
-// were not provided via options. We use this to look for the variables 
+// given a query and options, returns a vector of variables that
+// were not provided via options. We use this to look for the variables
 // in props
 function getMissingVars(flurQL, opts) {
 
@@ -352,7 +352,7 @@ function wrapComponent(WrappedComponent, query, opts) {
   const flurQLDisplayName = `Fluree(${getDisplayName(WrappedComponent)})`;
 
   class FlurQL extends Component {
-    static displayName = getDisplayName;
+    static displayName = flurQLDisplayName;
     static WrappedComponent = WrappedComponent;
     static contextTypes = {
       conn: PropTypes.object.isRequired
