@@ -452,7 +452,7 @@ function wrapComponent(WrappedComponent, query, opts) {
         warning: this.state.warning,
         status: this.state.status,
         loading: this.state.status !== "loaded",
-        get: function (keySeq, defaultVal) {
+        get: function (keySeq, defaultValue) {
           keySeq = Array.isArray(keySeq) ? keySeq : [keySeq];
           let obj = result;
           let idx = 0;
@@ -462,7 +462,7 @@ function wrapComponent(WrappedComponent, query, opts) {
             obj = obj[keySeq[idx++]];
           }
 
-          return (idx == length && obj !== undefined) ? obj : defaultVal;
+          return (idx == length && obj != null) ? obj : ((defaultValue === undefined) ? obj : defaultValue);
         }
       };
 
