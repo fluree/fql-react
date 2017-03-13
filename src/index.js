@@ -37,11 +37,25 @@ function workerMessageHandler(e) {
 
   switch (msg.event) {
 
-    case "connReady":
+    case "connStatus":
+      const response = msg.data || {};
+      const statusCode = response.status;
       if (connStatus[msg.conn]) {
-        connStatus[msg.conn].ready = true;
+        switch (statusCode) {
+          case 200:
+            connStatus[msg.conn].ready = true;
+            break;
+          case 401: // authorization error, need to log in
+            connStatus[msg.conn].ready = false;
+            connStatus[msg.conn].user = null;
+            connStatus[msg.conn].anonymous = true;
+            break;
+          default:
+            console.warn("Invalid connection response status: " + JSON.stringify(response));
+            break;
+        }
       }
-      return;
+      break;
 
     case "connClosed":
       cb = callbackRegistry[msg.ref];
@@ -49,7 +63,7 @@ function workerMessageHandler(e) {
         delete callbackRegistry[msg.ref];
         cb(msg.data);
       }
-      return;
+      break;
 
     case "connLogout":
       cb = callbackRegistry[msg.ref];
@@ -57,7 +71,7 @@ function workerMessageHandler(e) {
         delete callbackRegistry[msg.ref];
         cb(msg.data);
       }
-      return;
+      break;
 
     case "setState":
       const comp = componentIdx[msg.ref];
@@ -66,7 +80,7 @@ function workerMessageHandler(e) {
       } else {
         console.warn("Component no longer registered: " + msg.ref);
       }
-      return;
+      break;
 
     case "remoteInvoke":
       // check for a callback
@@ -75,7 +89,7 @@ function workerMessageHandler(e) {
         delete callbackRegistry[msg.ref];
         cb(msg.data);
       }
-      return;
+      break;
 
     case "login":
       // if login successful,  update conn's connStatus
@@ -89,11 +103,13 @@ function workerMessageHandler(e) {
         delete callbackRegistry[msg.ref];
         cb(msg.data);
       }
-      return;
+      break;
 
     default:
       console.warn("Unreconized event from worker: " + msg.event + ". Full message: " + JSON.stringify(msg));
+      break;
   }
+  return;
 }
 
 
@@ -246,8 +262,8 @@ export function ReactConnect(connSettings) {
   connStatus[connId] = {
     ready: false,
     // if we already passed in a token, can also pass in the user/anonymous flags for storing
-    user: connSettings.user,
-    anonymous: connSettings.anonymous
+    user: settings.user,
+    anonymous: settings.anonymous
   };
 
   // initiate our connection in the web worker
