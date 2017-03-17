@@ -1,9 +1,13 @@
+import 'console-polyfill';
 import hoistNonReactStatics from 'hoist-non-react-statics';
 import {
   Component,
   createElement,
   PropTypes,
 } from 'react';
+// import localStorage from './localStorage';
+
+let SHOULD_LOG = true;
 
 // id counter to be used for various things that require unique identifiers
 var idCounter = 0;
@@ -33,7 +37,8 @@ var fqlWorker;
 function workerMessageHandler(e) {
   const msg = e.data;
   var cb;
-  console.log("Worker received message: " + JSON.stringify(msg));
+
+  SHOULD_LOG && console.log("Worker received message: " + JSON.stringify(msg));
 
   switch (msg.event) {
 
@@ -78,7 +83,7 @@ function workerMessageHandler(e) {
       if (comp) {
         comp.setState(msg.data);
       } else {
-        console.warn("Component no longer registered: " + msg.ref);
+        SHOULD_LOG && console.warn("Component no longer registered: " + msg.ref);
       }
       break;
 
@@ -92,7 +97,7 @@ function workerMessageHandler(e) {
       break;
 
     case "login":
-      // if login successful,  update conn's connStatus
+      // if login successful, update conn's connStatus
       if (msg.data.status === 200) {
         connStatus[msg.conn].user = msg.data.body.user;
         connStatus[msg.conn].anonymous = msg.data.body.anonymous;
@@ -106,7 +111,7 @@ function workerMessageHandler(e) {
       break;
 
     default:
-      console.warn("Unreconized event from worker: " + msg.event + ". Full message: " + JSON.stringify(msg));
+      SHOULD_LOG && console.warn("Unreconized event from worker: " + msg.event + ". Full message: " + JSON.stringify(msg));
       break;
   }
   return;
@@ -114,13 +119,12 @@ function workerMessageHandler(e) {
 
 
 function setStateCb(conn, id, stateUpdate) {
-
   const comp = componentIdx[id];
 
   if (comp) {
     comp.setState(stateUpdate);
   } else {
-    console.warn("Component no longer registered: " + compId);
+    SHOULD_LOG && console.warn("Component no longer registered: " + compId);
   }
 }
 
@@ -134,7 +138,6 @@ function isClosed(connId) {
   const connObj = connStatus[connId];
   return (connObj && Object.keys(connObj).length === 0);
 }
-
 
 function workerInvoke(obj) {
   if (obj.cb) {
@@ -168,9 +171,8 @@ export function unregisterQuery(conn, compId) {
 }
 
 // Create a new connection with settings object.
-// need to provide url, instance and token keys at minumumb.
+// need to provide url, instance and token keys at minumum.
 export function ReactConnect(connSettings) {
-
   // initialize worker if not already done
   if (!fqlWorker) {
     fqlWorker = new Worker(connSettings.workerUrl || "/fqlClient.js");
@@ -183,21 +185,26 @@ export function ReactConnect(connSettings) {
 
   const baseSetting = {
     id: connId,
+    log: true,
     removeNamespace: true // by default remove namespace from results
   };
 
   const settings = Object.assign(baseSetting, connSettings);
 
+  SHOULD_LOG = settings.log;
+
   const conn = {
     id: connId,
     isReady: () => isReady(connId),
     isClosed: () => isClosed(connId),
-    login: (username, password, cb) => workerInvoke({
-      conn: connId,
-      action: "login",
-      params: [username, password],
-      cb: cb
-    }),
+    login: function(username, password, cb) {
+      return workerInvoke({
+        conn: connId,
+        action: "login",
+        params: [username, password],
+        cb: cb
+      });
+    },
     invoke: function (action, params, cb) {
       const invokeStatment = [action, params];
       return workerInvoke({
@@ -282,11 +289,9 @@ function getDisplayName(component) {
   return component.displayName || component.name || "Component";
 }
 
-
 // wraps react components that need a particular connection, making the
 // connection available via the context to children
 export class FlureeProvider extends Component {
-
   static propTypes = {
     conn: PropTypes.object.isRequired
   };
@@ -306,7 +311,6 @@ export class FlureeProvider extends Component {
   };
 
   getChildContext() {
-
     return {
       conn: this.conn
     }
@@ -322,7 +326,6 @@ export class FlureeProvider extends Component {
 // were not provided via options. We use this to look for the variables
 // in props
 function getMissingVars(flurQL, opts) {
-
   const vars = flurQL.vars;
 
   if (!vars || !Array.isArray(vars)) {
@@ -340,7 +343,6 @@ function getMissingVars(flurQL, opts) {
 // boilerplate is required to test if a property exists in the
 // wrapped component
 function fillDefaultResult(query) {
-
   if (!query) return {};
 
   const graph = query.graph || query;
@@ -362,7 +364,6 @@ function fillDefaultResult(query) {
   return defaultResult;
 }
 
-
 function queryIsValid(query) {
   if (query !== null && (Array.isArray(query) || typeof query === "object")) {
     const graph = Array.isArray(query) ? query : query.graph;
@@ -377,7 +378,6 @@ function queryIsValid(query) {
 }
 
 function wrapComponent(WrappedComponent, query, opts) {
-
   const flurQLDisplayName = `Fluree(${getDisplayName(WrappedComponent)})`;
 
   class FlurQL extends Component {
@@ -412,7 +412,13 @@ function wrapComponent(WrappedComponent, query, opts) {
     componentWillMount() {
       // get any missing vars from props and update this.opts with them
       if (this.missingVars.length !== 0) {
-        this.missingVars.map((v) => { this.opts.vars[v] = this.props[v] });
+        this.missingVars.forEach((v) => {
+          if('currentUser' === v) {
+            this.opts.vars[v] = this.conn.getUser();
+          } else {
+            this.opts.vars[v] = this.props[v];
+          }
+        });
       }
 
       // register this component for later re-render calling, etc.
@@ -424,10 +430,8 @@ function wrapComponent(WrappedComponent, query, opts) {
     }
 
     componentWillUnmount() {
-
       unregisterQuery(this.conn, this.id);
       delete componentIdx[this.id];
-
     }
 
     componentWillReceiveProps(nextProps) {
@@ -450,10 +454,14 @@ function wrapComponent(WrappedComponent, query, opts) {
         }
 
         if (didMissingVarsChange === true) {
-          this.missingVars.map((v) => {
-            this.opts.vars[v] = nextProps[v];
-            return;
+          this.missingVars.forEach((v) => {
+            if('currentUser' === v) {
+              this.opts.vars[v] = this.conn.getUser();
+            } else {
+              this.opts.vars[v] = nextProps[v];
+            }
           });
+
           registerQuery(this.conn, this.id, this.query, this.opts);
         }
       }
@@ -467,8 +475,8 @@ function wrapComponent(WrappedComponent, query, opts) {
         error: this.state.error,
         warning: this.state.warning,
         status: this.state.status,
-        loading: this.state.status !== "loaded",
-        get: function (keySeq, defaultValue) {
+        loading: !(this.state.status === "loaded" || this.state.status === "error"),
+        get: function get(keySeq, defaultValue) {
           keySeq = Array.isArray(keySeq) ? keySeq : [keySeq];
           let obj = result;
           let idx = 0;
@@ -491,10 +499,8 @@ function wrapComponent(WrappedComponent, query, opts) {
   return hoistNonReactStatics(FlurQL, WrappedComponent, {});
 }
 
-
 export function flureeQL(query, opts) {
   return function (WrappedComponent) {
     return wrapComponent(WrappedComponent, query, opts);
   }
 }
-
