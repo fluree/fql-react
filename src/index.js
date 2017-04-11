@@ -33,6 +33,12 @@ var callbackRegistry = {};
 // holds worker reference globally. Don't initiate until first request for connection
 var fqlWorker;
 
+// worker queue
+var workerQueue = [];
+
+// worker initialized
+var workerInitialized = false;
+
 // worker.onmessage handler
 function workerMessageHandler(e) {
   const msg = e.data;
@@ -41,6 +47,11 @@ function workerMessageHandler(e) {
   SHOULD_LOG && console.log("Worker received message: " + JSON.stringify(msg));
 
   switch (msg.event) {
+    case "connInit":
+      workerInitialized = true;
+      workerQueue.forEach(workerInvoke);
+      workerQueue = [];
+      break;
 
     case "connStatus":
       const response = msg.data || {};
@@ -140,12 +151,20 @@ function isClosed(connId) {
 }
 
 function workerInvoke(obj) {
+  console.log('invoke', obj.action, workerInitialized, workerQueue);
+
   if (obj.cb) {
     obj.ref = obj.ref || nextId();
     callbackRegistry[obj.ref] = obj.cb;
     delete obj.cb;
   }
-  fqlWorker.postMessage(obj);
+
+  if(workerInitialized) {
+    fqlWorker.postMessage(obj);
+  } else {
+    workerQueue.push(obj);
+  }
+
   return true;
 }
 
@@ -170,6 +189,10 @@ export function unregisterQuery(conn, compId) {
   });
 }
 
+function workerErrorHandler(error) {
+  console.error('Web worker error', JSON.stringify(error));
+}
+
 // Create a new connection with settings object.
 // need to provide url, instance and token keys at minumum.
 export function ReactConnect(connSettings) {
@@ -177,10 +200,10 @@ export function ReactConnect(connSettings) {
   if (!fqlWorker) {
     fqlWorker = new Worker(connSettings.workerUrl || "/fqlClient.js");
     fqlWorker.onmessage = workerMessageHandler;
+    fqlWorker.onerror = workerErrorHandler;
   }
 
   connIdCounter++;
-
   const connId = connIdCounter;
 
   const baseSetting = {
