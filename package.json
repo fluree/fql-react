@@ -23,9 +23,7 @@
   },
   "dependencies": {
     "console-polyfill": "^0.2.3",
-    "hoist-non-react-statics": "^1.2.0"
-  },
-  "peerDependencies": {
+    "hoist-non-react-statics": "^1.2.0",
     "react": "^15.0.0"
   },
   "devDependencies": {
