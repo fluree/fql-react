@@ -4,7 +4,9 @@ import {
   Component,
   createElement,
   PropTypes,
+  Children,
 } from 'react';
+
 // import localStorage from './localStorage';
 
 let SHOULD_LOG = true;
@@ -340,7 +342,7 @@ export class FlureeProvider extends Component {
   };
 
   render() {
-    return React.Children.only(this.props.children);
+    return Children.only(this.props.children);
   };
 }
 
