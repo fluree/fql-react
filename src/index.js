@@ -151,7 +151,7 @@ function isClosed(connId) {
 }
 
 function workerInvoke(obj) {
-  console.log('invoke', obj.action, workerInitialized, workerQueue);
+  // console.log('invoke', obj.action, workerInitialized, workerQueue);
 
   if (obj.cb) {
     obj.ref = obj.ref || nextId();
@@ -495,6 +495,7 @@ function wrapComponent(WrappedComponent, query, opts) {
       const data = {
         id: this.id,
         result: result,
+        deltas: this.state.deltas,
         error: this.state.error,
         warning: this.state.warning,
         status: this.state.status,
