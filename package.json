@@ -1,6 +1,6 @@
 {
   "name": "fql-react",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "React Client for FlureeQL",
   "repository": {
     "type": "git",

@@ -130,6 +130,14 @@ function workerMessageHandler(e) {
   return;
 }
 
+function parseToken(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch (e) {
+    return { anonymous:true };
+  }
+}
+
 
 function setStateCb(conn, id, stateUpdate) {
   const comp = componentIdx[id];
@@ -290,12 +298,13 @@ export function ReactConnect(connSettings) {
     }
   };
 
+  const jwt = parseToken(settings.token);
+
   // initialize connection status, set ready to false
   connStatus[connId] = {
     ready: false,
-    // if we already passed in a token, can also pass in the user/anonymous flags for storing
-    user: settings.user,
-    anonymous: settings.anonymous
+    user: jwt.sub ? ['user/flake', jwt.sub] : null,
+    anonymous: jwt.claim ? !!jwt.claim.anonymous : true
   };
 
   // initiate our connection in the web worker
