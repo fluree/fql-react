@@ -223,6 +223,10 @@ export function ReactConnect(connSettings) {
   };
 
   const settings = Object.assign(baseSetting, connSettings);
+  const jwt = parseToken(settings.token);
+
+  settings.user = jwt.sub ? ['user/flake', jwt.sub] : null;
+  settings.anonymous = jwt.claim ? !!jwt.claim.anonymous : true;
 
   SHOULD_LOG = settings.log;
 
@@ -298,13 +302,11 @@ export function ReactConnect(connSettings) {
     }
   };
 
-  const jwt = parseToken(settings.token);
-
   // initialize connection status, set ready to false
   connStatus[connId] = {
     ready: false,
-    user: jwt.sub ? ['user/flake', jwt.sub] : null,
-    anonymous: jwt.claim ? !!jwt.claim.anonymous : true
+    user: settings.user,
+    anonymous: settings.anonymous
   };
 
   // initiate our connection in the web worker
