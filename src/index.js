@@ -161,8 +161,6 @@ function isClosed(connId) {
 }
 
 function workerInvoke(obj) {
-  // console.log('invoke', obj.action, workerInitialized, workerQueue);
-
   if (obj.cb) {
     obj.ref = obj.ref || nextId();
     callbackRegistry[obj.ref] = obj.cb;
@@ -226,7 +224,7 @@ export function ReactConnect(connSettings) {
   const jwt = parseToken(settings.token);
 
   settings.user = jwt.sub ? ['user/flake', jwt.sub] : null;
-  settings.anonymous = jwt.claim ? !!jwt.claim.anonymous : true;
+  settings.anonymous = jwt.sub ? false : true;
 
   SHOULD_LOG = settings.log;
 
