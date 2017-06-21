@@ -112,6 +112,7 @@ function workerMessageHandler(e) {
     case "login":
       // if login successful, update conn's connStatus
       if (msg.data.status === 200) {
+        connStatus[msg.conn].token = msg.data.body.token;
         connStatus[msg.conn].user = msg.data.body.user;
         connStatus[msg.conn].anonymous = msg.data.body.anonymous;
       }
@@ -255,6 +256,9 @@ export function ReactConnect(connSettings) {
     getInstance: function () {
       return connSettings.instance;
     },
+    getToken: function() {
+      return connStatus[connId].token;
+    },
     isAuthenticated: function () {
       if (connStatus[connId].anonymous === false) {
         return true;
@@ -304,7 +308,8 @@ export function ReactConnect(connSettings) {
   connStatus[connId] = {
     ready: false,
     user: settings.user,
-    anonymous: settings.anonymous
+    anonymous: settings.anonymous,
+    token: settings.token
   };
 
   // initiate our connection in the web worker
