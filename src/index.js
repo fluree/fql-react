@@ -1,11 +1,8 @@
 import 'console-polyfill';
 import hoistNonReactStatics from 'hoist-non-react-statics';
-import {
-  Component,
-  createElement,
-  PropTypes,
-  Children,
-} from 'react';
+import { Component, createElement, Children } from 'react';
+import PropTypes from 'prop-types';
+import localStorage from './localStorage';
 
 // import localStorage from './localStorage';
 
@@ -24,6 +21,8 @@ var connIdCounter = 0;
 // - ready (boolean)
 // - user (user ident - two-tuple)
 // - anonymous (boolean)
+// - time - a time over-ride for all 'current' queries in the UI 
+// - unauthorizedCallbacks - optionally provided functions to call when something is unauthorized
 var connStatus = {};
 
 // a map of each component ID to it's object
@@ -41,12 +40,42 @@ var workerQueue = [];
 // worker initialized
 var workerInitialized = false;
 
+
+function addUnathorizedCallback(connId, cb) {
+  const callbackID = Math.random();
+  var callbackMap = connStatus[connId]['unauthorizedCallbacks'] || {};
+  // tag callback function so we can easily locate and remove later.
+  cb.__fluree_cb_id = callbackID;
+  callbackMap[callbackID] = cb;
+  connStatus[connId]['unauthorizedCallbacks'] = callbackMap;
+  return true;
+}
+
+function removeUnauthorizedCallback(connId, cb) {
+  const callbackID = cb.__fluree_cb_id;
+  if (callbackID)
+    delete connStatus[connId]['unauthorizedCallbacks'][callbackID];
+  return !!callbackID;
+}
+
+function executeUnauthorizedCallbacks(connId, data) {
+  if (connStatus[connId]['unauthorizedCallbacks'])
+    for (var key in connStatus[connId]['unauthorizedCallbacks']) {
+      const cb = connStatus[connId]['unauthorizedCallbacks'][key];
+      cb(data);
+    }
+}
+
 // worker.onmessage handler
 function workerMessageHandler(e) {
   const msg = e.data;
   var cb;
 
   SHOULD_LOG && console.log("Worker received message: " + JSON.stringify(msg));
+
+  // if unauthorized response, trigger any registered unauthorizedCallbacks
+  if (msg.data && msg.data.status === 401)
+    executeUnauthorizedCallbacks(msg.conn, msg.data);
 
   switch (msg.event) {
     case "connInit":
@@ -156,12 +185,16 @@ function workerInvoke(obj) {
   // console.log('invoke', obj.action, workerInitialized, workerQueue);
 
   if (obj.cb) {
-    obj.ref = obj.ref || nextId();
-    callbackRegistry[obj.ref] = obj.cb;
+    if (typeof obj.cb === 'function') {
+      obj.ref = obj.ref || nextId();
+      callbackRegistry[obj.ref] = obj.cb;
+    } else {
+      console.warn('Callback supplied was not a function:', obj);
+    }
     delete obj.cb;
   }
 
-  if(workerInitialized) {
+  if (workerInitialized) {
     fqlWorker.postMessage(obj);
   } else {
     workerQueue.push(obj);
@@ -171,12 +204,12 @@ function workerInvoke(obj) {
 }
 
 // Register a query, provide the connection, component ID, query and query options
-export function registerQuery(conn, compId, query, opts) {
+export function registerQuery(conn, compId, query, opts, forceUpdate) {
   const invokeObj = {
     conn: conn.id,
     action: "registerQuery",
     ref: compId,
-    params: [compId, query, opts]
+    params: [compId, query, opts, forceUpdate]
   };
   return workerInvoke(invokeObj);
 }
@@ -191,9 +224,29 @@ export function unregisterQuery(conn, compId) {
   });
 }
 
+function queryIsValid(query) {
+  if (query !== null && (Array.isArray(query) || typeof query === "object")) {
+    const graph = Array.isArray(query) ? query : query.graph;
+    if (Array.isArray(graph) && graph.length > 0) {
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    return false;
+  }
+}
+
 function workerErrorHandler(error) {
   console.error('Web worker error', JSON.stringify(error));
 }
+
+function instanceFromHostname() {
+  const url = window.location.hostname || "";
+  const [_, instance] = url.match(/([^./]+)\.flur\.ee/) || []; // eslint-disable-line
+  return instance;
+}
+
 
 // Create a new connection with settings object.
 // need to provide url, instance and token keys at minumum.
@@ -207,14 +260,24 @@ export function ReactConnect(connSettings) {
 
   connIdCounter++;
   const connId = connIdCounter;
+  const instance = connSettings.instance || instanceFromHostname();
+  const localStorageKey = instance + '/login';
+  const savedSession = localStorage.getItem(localStorageKey) || {};
 
   const baseSetting = {
     id: connId,
     log: true,
-    removeNamespace: true // by default remove namespace from results
+    removeNamespace: true, // by default remove namespace from results
+    instance: instance,
+    url: connSettings.url || 'https://' + instance,
+    token: connSettings.token || savedSession.token,
+    user: connSettings.user || savedSession.user,
+    anonymous: connSettings.anonymous || savedSession.anonymous
   };
 
-  const settings = Object.assign(baseSetting, connSettings);
+
+  // copy over all settings that can be serialized, else will fail web worker messaging
+  const settings = Object.assign(baseSetting, JSON.parse(JSON.stringify(connSettings)));
 
   SHOULD_LOG = settings.log;
 
@@ -222,12 +285,18 @@ export function ReactConnect(connSettings) {
     id: connId,
     isReady: () => isReady(connId),
     isClosed: () => isClosed(connId),
-    login: function(username, password, cb) {
+    login: function (username, password, cb, rememberMe) {
       return workerInvoke({
         conn: connId,
         action: "login",
         params: [username, password],
-        cb: cb
+        cb: function (result) {
+          if (cb && typeof cb === 'function') {
+            if (result.status === 200 && rememberMe)
+              localStorage.setItem(localStorageKey, result.body);
+            cb(result);
+          }
+        }
       });
     },
     invoke: function (action, params, cb) {
@@ -271,6 +340,8 @@ export function ReactConnect(connSettings) {
         user: null,
         anonymous: true
       };
+      // if we stored credentials for 'rememberMe', clear them
+      localStorage.removeItem(localStorageKey);
       return workerInvoke({
         conn: connId,
         action: "logout",
@@ -287,6 +358,34 @@ export function ReactConnect(connSettings) {
         params: [],
         cb: cb
       });
+    },
+    forceTime: function (t) {
+      if (t && !(t instanceof Date)) {
+        console.error("forceTime requires a date as a parameter, provided: " + t)
+        return;
+      }
+      const tISOString = t ? t.toISOString() : null;
+      const componentIds = Object.keys(componentIdx);
+      // update central conn status to use this t for any new components rendered
+      connStatus[connId].t = tISOString;
+      // update options of all mounted components to add or remove 't' as applicable
+      componentIds.map(id => {
+        let component = componentIdx[id];
+
+        if (t)
+          component.opts.t = tISOString;
+        else
+          delete component.opts.t;
+
+        registerQuery(component.conn, component.id, component.query, component.opts);
+      })
+    },
+    getTime: function () {
+      return connStatus[connId].t ? new Date(Date.parse(connStatus[connId].t)) : null;
+    },
+    unauthorizedCallback: {
+      add: function (cb) { addUnathorizedCallback(connId, cb) },
+      remove: function (cb) { removeUnauthorizedCallback(connId, cb) }
     }
   };
 
@@ -295,7 +394,9 @@ export function ReactConnect(connSettings) {
     ready: false,
     // if we already passed in a token, can also pass in the user/anonymous flags for storing
     user: settings.user,
-    anonymous: settings.anonymous
+    anonymous: settings.anonymous,
+    // optional unauthorizedCallback will be called when a request is unauthorized
+    unauthorizedCallback: connSettings.unauthorizedCallback
   };
 
   // initiate our connection in the web worker
@@ -389,19 +490,6 @@ function fillDefaultResult(query) {
   return defaultResult;
 }
 
-function queryIsValid(query) {
-  if (query !== null && (Array.isArray(query) || typeof query === "object")) {
-    const graph = Array.isArray(query) ? query : query.graph;
-    if (Array.isArray(graph) && graph.length > 0) {
-      return true;
-    } else {
-      return false;
-    }
-  } else {
-    return false;
-  }
-}
-
 function wrapComponent(WrappedComponent, query, opts) {
   const flurQLDisplayName = `Fluree(${getDisplayName(WrappedComponent)})`;
 
@@ -438,7 +526,7 @@ function wrapComponent(WrappedComponent, query, opts) {
       // get any missing vars from props and update this.opts with them
       if (this.missingVars.length !== 0) {
         this.missingVars.forEach((v) => {
-          if('currentUser' === v) {
+          if ('currentUser' === v) {
             this.opts.vars[v] = this.conn.getUser();
           } else {
             this.opts.vars[v] = this.props[v];
@@ -448,6 +536,9 @@ function wrapComponent(WrappedComponent, query, opts) {
 
       // register this component for later re-render calling, etc.
       componentIdx[this.id] = this;
+      // apply time over-ride to options if there is one
+      if (connStatus[this.conn.id].t)
+        this.opts.t = connStatus[this.conn.id].t;
 
       if (this.query && this.isValidQuery) {
         registerQuery(this.conn, this.id, this.query, this.opts);
@@ -480,7 +571,7 @@ function wrapComponent(WrappedComponent, query, opts) {
 
         if (didMissingVarsChange === true) {
           this.missingVars.forEach((v) => {
-            if('currentUser' === v) {
+            if ('currentUser' === v) {
               this.opts.vars[v] = this.conn.getUser();
             } else {
               this.opts.vars[v] = nextProps[v];
@@ -497,6 +588,10 @@ function wrapComponent(WrappedComponent, query, opts) {
       const data = {
         id: this.id,
         result: result,
+        forceUpdate: function () {
+          if (this.query && this.isValidQuery)
+            registerQuery(this.conn, this.id, this.query, this.opts, true);
+        }.bind(this),
         deltas: this.state.deltas,
         error: this.state.error,
         warning: this.state.warning,
