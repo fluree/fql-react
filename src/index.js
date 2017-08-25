@@ -4,8 +4,6 @@ import { Component, createElement, Children } from 'react';
 import PropTypes from 'prop-types';
 import localStorage from './localStorage';
 
-// import localStorage from './localStorage';
-
 let SHOULD_LOG = true;
 
 // id counter to be used for various things that require unique identifiers
@@ -19,9 +17,7 @@ var connIdCounter = 0;
 
 // map of each connection to an object containing keys:
 // - ready (boolean)
-// - user (user ident - two-tuple)
-// - anonymous (boolean)
-// - time - a time over-ride for all 'current' queries in the UI 
+// - time - a time over-ride for all 'current' queries in the UI
 // - unauthorizedCallbacks - optionally provided functions to call when something is unauthorized
 var connStatus = {};
 
@@ -94,8 +90,7 @@ function workerMessageHandler(e) {
             break;
           case 401: // authorization error, need to log in
             connStatus[msg.conn].ready = false;
-            connStatus[msg.conn].user = null;
-            connStatus[msg.conn].anonymous = true;
+            connStatus[msg.conn].token = null;
             break;
           default:
             console.warn("Invalid connection response status: " + JSON.stringify(response));
@@ -141,8 +136,7 @@ function workerMessageHandler(e) {
     case "login":
       // if login successful, update conn's connStatus
       if (msg.data.status === 200) {
-        connStatus[msg.conn].user = msg.data.body.user;
-        connStatus[msg.conn].anonymous = msg.data.body.anonymous;
+        connStatus[msg.conn].token = msg.data.body.token;
       }
       // if there was a callback passed to login(), execute
       cb = callbackRegistry[msg.ref];
@@ -157,6 +151,14 @@ function workerMessageHandler(e) {
       break;
   }
   return;
+}
+
+function parseToken(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch (e) {
+    return {};
+  }
 }
 
 
@@ -182,8 +184,6 @@ function isClosed(connId) {
 }
 
 function workerInvoke(obj) {
-  // console.log('invoke', obj.action, workerInitialized, workerQueue);
-
   if (obj.cb) {
     if (typeof obj.cb === 'function') {
       obj.ref = obj.ref || nextId();
@@ -271,13 +271,9 @@ export function ReactConnect(connSettings) {
     instance: instance,
     url: connSettings.url || 'https://' + instance,
     token: connSettings.token || savedSession.token,
-    user: connSettings.user || savedSession.user,
-    anonymous: connSettings.anonymous || savedSession.anonymous
   };
 
-
-  // copy over all settings that can be serialized, else will fail web worker messaging
-  const settings = Object.assign(baseSetting, JSON.parse(JSON.stringify(connSettings)));
+  const settings = Object.assign(baseSetting, connSettings);
 
   SHOULD_LOG = settings.log;
 
@@ -291,9 +287,10 @@ export function ReactConnect(connSettings) {
         action: "login",
         params: [username, password],
         cb: function (result) {
+          if (result.status === 200 && rememberMe) {
+            localStorage.setItem(localStorageKey, result.body);
+          }
           if (cb && typeof cb === 'function') {
-            if (result.status === 200 && rememberMe)
-              localStorage.setItem(localStorageKey, result.body);
             cb(result);
           }
         }
@@ -309,23 +306,22 @@ export function ReactConnect(connSettings) {
       });
     },
     getUser: function () {
-      return connStatus[connId].user;
+      const userId = parseToken(connStatus[connId].token)['sub'];
+      return userId ? ["user/flake", userId] : null;
     },
     getInstance: function () {
       return connSettings.instance;
     },
+    getToken: function() {
+      return connStatus[connId].token;
+    },
     isAuthenticated: function () {
-      if (connStatus[connId].anonymous === false) {
-        return true;
-      } else {
-        return false;
-      }
+      return !!connStatus[connId].token;
     },
     reset: function (cb) {
       connStatus[connId] = {
         ready: false,
-        user: null,
-        anonymous: true
+        token: null
       };
       return workerInvoke({
         conn: connId,
@@ -337,8 +333,7 @@ export function ReactConnect(connSettings) {
     logout: function (cb) {
       connStatus[connId] = {
         ready: false,
-        user: null,
-        anonymous: true
+        token: null
       };
       // if we stored credentials for 'rememberMe', clear them
       localStorage.removeItem(localStorageKey);
@@ -392,11 +387,9 @@ export function ReactConnect(connSettings) {
   // initialize connection status, set ready to false
   connStatus[connId] = {
     ready: false,
-    // if we already passed in a token, can also pass in the user/anonymous flags for storing
-    user: settings.user,
-    anonymous: settings.anonymous,
     // optional unauthorizedCallback will be called when a request is unauthorized
-    unauthorizedCallback: connSettings.unauthorizedCallback
+    unauthorizedCallback: connSettings.unauthorizedCallback,
+    token: settings.token
   };
 
   // initiate our connection in the web worker
